@@ -3,173 +3,91 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LoanLens - AI-Powered Loan Document Intelligence</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <title>LoanLens - Loan Document Intelligence</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <nav class="navbar">
-    <div class="nav-brand">
-      <i class="fas fa-search-dollar"></i>
-      <span>LoanLens</span>
+  <nav class="nav">
+    <div class="nav-brand">LoanLens</div>
+    <div class="nav-tabs">
+      <button class="tab active" data-view="analyze">Analyze</button>
+      <button class="tab" data-view="compare">Compare</button>
     </div>
-    <div class="nav-links">
-      <a href="#" class="active" data-view="upload">Upload</a>
-      <a href="#" data-view="dashboard">Dashboard</a>
-      <a href="#" data-view="compare">Compare</a>
-    </div>
-    <div class="nav-badge">LMA Edge Hackathon</div>
   </nav>
 
-  <main class="container">
-    <!-- Upload View -->
-    <section id="upload-view" class="view active">
-      <div class="hero">
-        <h1>Transform Loan Documents into Actionable Intelligence</h1>
-        <p>Upload your loan agreements and let AI extract key terms, covenants, risks, and ESG provisions in seconds.</p>
+  <main class="main">
+    <!-- Analyze View -->
+    <section id="analyze-view" class="view active">
+      <div class="upload-zone" id="dropZone">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+        </svg>
+        <h3>Drop PDF or paste text</h3>
+        <input type="file" id="fileInput" accept=".pdf" hidden>
+        <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">Browse Files</button>
       </div>
 
-      <div class="upload-section">
-        <div class="upload-box" id="dropZone">
-          <i class="fas fa-cloud-upload-alt"></i>
-          <h3>Drop your loan document here</h3>
-          <p>or click to browse (PDF supported)</p>
-          <input type="file" id="fileInput" accept=".pdf" hidden>
-        </div>
-        
-        <div class="divider">
-          <span>OR</span>
-        </div>
+      <div class="divider">OR</div>
 
-        <div class="paste-section">
-          <textarea id="pasteText" placeholder="Paste loan document text here for analysis..."></textarea>
-          <button id="analyzeTextBtn" class="btn btn-primary">
-            <i class="fas fa-magic"></i> Analyze Text
+      <div class="text-input">
+        <textarea id="textInput" placeholder="Paste loan document text here..."></textarea>
+        <button id="analyzeBtn" class="btn-primary">Analyze Document</button>
+      </div>
+
+      <div id="results" class="results hidden">
+        <div class="results-header">
+          <h2 id="docTitle">Analysis Results</h2>
+          <button class="btn-icon" onclick="exportJSON()" title="Export JSON">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
           </button>
         </div>
 
-        <button id="loadDemoBtn" class="btn btn-secondary">
-          <i class="fas fa-play-circle"></i> Load Demo Document
-        </button>
-      </div>
-
-      <div id="loadingOverlay" class="loading-overlay hidden">
-        <div class="loader">
-          <div class="spinner"></div>
-          <p>Analyzing document...</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Dashboard View -->
-    <section id="dashboard-view" class="view">
-      <div class="dashboard-header">
-        <h2><i class="fas fa-file-contract"></i> <span id="docName">Document Analysis</span></h2>
-        <div class="header-actions">
-          <button class="btn btn-outline" onclick="exportAnalysis()">
-            <i class="fas fa-download"></i> Export
-          </button>
-        </div>
-      </div>
-
-      <div class="summary-cards">
-        <div class="card summary-card">
-          <div class="card-icon blue"><i class="fas fa-dollar-sign"></i></div>
-          <div class="card-content">
-            <span class="label">Facility Amount</span>
-            <span class="value" id="summaryAmount">-</span>
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-label">Amount</span>
+            <span class="metric-value" id="metricAmount">-</span>
           </div>
-        </div>
-        <div class="card summary-card">
-          <div class="card-icon green"><i class="fas fa-percentage"></i></div>
-          <div class="card-content">
-            <span class="label">Interest Rate</span>
-            <span class="value" id="summaryRate">-</span>
+          <div class="metric">
+            <span class="metric-label">Rate</span>
+            <span class="metric-value" id="metricRate">-</span>
           </div>
-        </div>
-        <div class="card summary-card">
-          <div class="card-icon purple"><i class="fas fa-balance-scale"></i></div>
-          <div class="card-content">
-            <span class="label">Covenants</span>
-            <span class="value" id="summaryCovenant">-</span>
+          <div class="metric">
+            <span class="metric-label">Covenants</span>
+            <span class="metric-value" id="metricCovenants">-</span>
           </div>
-        </div>
-        <div class="card summary-card">
-          <div class="card-icon orange"><i class="fas fa-exclamation-triangle"></i></div>
-          <div class="card-content">
-            <span class="label">Risk Flags</span>
-            <span class="value" id="summaryRisks">-</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="dashboard-grid">
-        <!-- Parties Section -->
-        <div class="card">
-          <div class="card-header">
-            <h3><i class="fas fa-users"></i> Parties</h3>
-          </div>
-          <div class="card-body" id="partiesContent">
-            <!-- Populated by JS -->
+          <div class="metric">
+            <span class="metric-label">Risks</span>
+            <span class="metric-value" id="metricRisks">-</span>
           </div>
         </div>
 
-        <!-- Financial Terms Section -->
-        <div class="card">
-          <div class="card-header">
-            <h3><i class="fas fa-coins"></i> Financial Terms</h3>
-          </div>
-          <div class="card-body" id="financialContent">
-            <!-- Populated by JS -->
-          </div>
-        </div>
+        <div class="sections">
+          <details class="section" open>
+            <summary>Financial Terms</summary>
+            <div id="financialTerms" class="section-content"></div>
+          </details>
 
-        <!-- Key Dates Section -->
-        <div class="card">
-          <div class="card-header">
-            <h3><i class="fas fa-calendar-alt"></i> Key Dates</h3>
-          </div>
-          <div class="card-body" id="datesContent">
-            <!-- Populated by JS -->
-          </div>
-        </div>
+          <details class="section">
+            <summary>Parties</summary>
+            <div id="parties" class="section-content"></div>
+          </details>
 
-        <!-- ESG Section -->
-        <div class="card esg-card">
-          <div class="card-header">
-            <h3><i class="fas fa-leaf"></i> ESG & Sustainability</h3>
-          </div>
-          <div class="card-body" id="esgContent">
-            <!-- Populated by JS -->
-          </div>
-        </div>
+          <details class="section">
+            <summary>Covenants</summary>
+            <div id="covenants" class="section-content"></div>
+          </details>
 
-        <!-- Covenants Section -->
-        <div class="card full-width">
-          <div class="card-header">
-            <h3><i class="fas fa-gavel"></i> Covenants</h3>
-            <div class="tabs">
-              <button class="tab active" data-tab="financial">Financial</button>
-              <button class="tab" data-tab="informational">Informational</button>
-              <button class="tab" data-tab="negative">Negative</button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div id="covenantsContent">
-              <!-- Populated by JS -->
-            </div>
-          </div>
-        </div>
+          <details class="section">
+            <summary>Risk Flags</summary>
+            <div id="risks" class="section-content"></div>
+          </details>
 
-        <!-- Risk Flags Section -->
-        <div class="card full-width">
-          <div class="card-header">
-            <h3><i class="fas fa-shield-alt"></i> Risk Analysis</h3>
-          </div>
-          <div class="card-body" id="risksContent">
-            <!-- Populated by JS -->
-          </div>
+          <details class="section">
+            <summary>ESG & Sustainability</summary>
+            <div id="esg" class="section-content"></div>
+          </details>
         </div>
       </div>
     </section>
@@ -177,28 +95,20 @@
     <!-- Compare View -->
     <section id="compare-view" class="view">
       <div class="compare-header">
-        <h2><i class="fas fa-columns"></i> Compare Loans</h2>
-        <p>Select multiple analyzed documents to compare side by side</p>
+        <h2>Compare Loans</h2>
+        <p>Select documents to compare</p>
       </div>
-
-      <div class="loan-selector">
-        <div id="loanCheckboxes">
-          <!-- Populated by JS -->
-        </div>
-        <button id="compareBtn" class="btn btn-primary" disabled>
-          <i class="fas fa-balance-scale"></i> Compare Selected
-        </button>
-      </div>
-
-      <div id="comparisonResults" class="comparison-grid hidden">
-        <!-- Populated by JS -->
-      </div>
+      <div id="compareList" class="compare-list"></div>
+      <div id="compareResults" class="compare-results hidden"></div>
     </section>
   </main>
 
-  <footer>
-    <p>Built for <strong>LMA Edge Hackathon 2026</strong> | Reimagining Loan Markets</p>
-  </footer>
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <p>Analyzing document...</p>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
 </body>

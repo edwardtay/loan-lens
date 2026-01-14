@@ -2,7 +2,7 @@
 
 **AI-Powered Loan Document Intelligence Platform**
 
-*Built for the LMA Edge Hackathon 2026*
+Transform complex loan agreements into structured, actionable data in seconds.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
@@ -10,26 +10,17 @@
 
 [Live Demo](#-demo) • [Features](#-features) • [Installation](#-installation) • [Security](#-security)
 
-## 🎯 Problem Statement
+## 🎯 Overview
 
-Loan agreements are complex, multi-hundred-page legal documents that exist as unstructured text rather than actionable data. This creates significant challenges:
+LoanLens is an enterprise-grade platform that transforms complex loan agreements from unstructured documents into structured, actionable intelligence. Built for financial institutions, loan servicers, and corporate treasury teams who need to analyze and monitor loan portfolios efficiently.
 
-- **Time-consuming analysis**: Manual review of loan documents takes hours or days
-- **Inconsistent data extraction**: Different analysts may interpret terms differently
-- **Difficult comparison**: Comparing terms across multiple loans is nearly impossible
-- **Hidden risks**: Critical clauses like cross-defaults or MAC provisions can be missed
-- **ESG tracking gaps**: Sustainability-linked provisions are hard to monitor
+### Key Capabilities
 
-## 💡 Solution
-
-LoanLens transforms loan documents into structured, actionable intelligence using AI-powered analysis. Upload a loan agreement and instantly extract:
-
-- **Parties**: Borrowers, lenders, agents, guarantors
-- **Financial Terms**: Principal amount, interest rates, margins, reference rates
-- **Covenants**: Financial, informational, and negative covenants
-- **Key Dates**: Maturity, effective dates, payment schedules
-- **ESG Provisions**: Sustainability-linked features, KPIs, margin ratchets
-- **Risk Flags**: Cross-defaults, MAC clauses, change of control provisions
+- **Automated Data Extraction**: Extract parties, financial terms, covenants, and key dates from loan documents
+- **Risk Intelligence**: Identify and flag high-risk clauses automatically
+- **Covenant Monitoring**: Track compliance with financial and operational covenants
+- **ESG Analytics**: Monitor sustainability-linked provisions and green loan features
+- **Portfolio Comparison**: Analyze multiple loans side-by-side with inconsistency detection
 
 ## 🚀 Features
 
@@ -76,6 +67,8 @@ LoanLens transforms loan documents into structured, actionable intelligence usin
 
 ## 📦 Installation
 
+### Quick Start (Development)
+
 ```bash
 # Clone the repository
 git clone https://github.com/edwardtay/loan-lens.git
@@ -90,10 +83,19 @@ npm start
 
 Visit `http://localhost:3456` in your browser.
 
+### Production Deployment
+
+See [ENTERPRISE.md](ENTERPRISE.md) for production deployment options including:
+- Cloud deployment (AWS, Azure, GCP)
+- On-premises installation
+- Docker containerization
+- Kubernetes orchestration
+
 ### Requirements
 - Node.js 18+ 
 - npm or yarn
 - Modern web browser
+- (Optional) PostgreSQL for persistent storage
 
 ## 🛡️ Security
 
@@ -133,47 +135,68 @@ See [SECURITY.md](SECURITY.md) for full details.
 3. Select loans to compare
 4. View inconsistency alerts and side-by-side comparison
 
-## 📊 Categories Addressed
+## �  Use Cases
 
-This project addresses multiple LMA Edge Hackathon categories:
+### Financial Institutions
+- Accelerate loan origination and due diligence
+- Standardize data extraction across loan portfolios
+- Monitor covenant compliance in real-time
 
-1. **Digital Loans**: Transforms unstructured loan documents into structured data
-2. **Loan Documents**: Speeds up document analysis and term extraction
-3. **Keeping Loans on Track**: Extracts covenants and obligations for monitoring
-4. **Greener Lending**: Identifies and tracks ESG provisions and KPIs
+### Corporate Treasury
+- Track obligations across multiple credit facilities
+- Compare terms and conditions across lenders
+- Monitor ESG commitments and reporting requirements
 
-## 🔮 Future Roadmap
+### Loan Servicers
+- Automate document processing workflows
+- Reduce manual review time by 90%
+- Improve accuracy and consistency
 
-- [ ] Integration with LMA standard templates
-- [ ] Machine learning model training on real loan documents
-- [ ] REST API for loan management system integration
-- [ ] Real-time covenant monitoring and alerts
+## 🔮 Roadmap
+
+### Q1 2026
+- [ ] REST API for enterprise integration
+- [ ] Machine learning model training on loan corpus
+- [ ] Real-time covenant monitoring dashboard
 - [ ] Automated compliance reporting
-- [ ] Multi-language support
-- [ ] Blockchain integration for loan trading transparency
-- [ ] Mobile application
 
-## 🏆 LMA Edge Hackathon 2026
+### Q2 2026
+- [ ] Integration with major loan management systems
+- [ ] Multi-language document support
+- [ ] Advanced analytics and predictive insights
+- [ ] Mobile application (iOS/Android)
 
-This project addresses multiple hackathon categories:
-
-1. **Digital Loans** ⭐ - Transforms documents into structured data
-2. **Loan Documents** - Speeds up analysis and term extraction
-3. **Keeping Loans on Track** - Covenant monitoring and compliance
-4. **Greener Lending** - ESG provision tracking and analysis
+### Future
+- [ ] Blockchain integration for loan trading
+- [ ] Natural language query interface
+- [ ] Automated document generation
 
 ## 👥 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## 👥 Contributing
+
+We welcome contributions! Please see our contributing guidelines:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details
 
-## 🙏 Acknowledgments
+## 📧 Contact
 
-Built for the LMA Edge Hackathon 2026 - Reimagining the multi-trillion dollar loan market
+For enterprise inquiries, partnerships, or support:
+- **Email**: contact@loanlens.io
+- **Website**: https://loanlens.io
+- **GitHub**: https://github.com/edwardtay/loan-lens
+- **Enterprise Solutions**: See [ENTERPRISE.md](ENTERPRISE.md)
 
 ---
 
-**Made with ❤️ for the loan markets community**
+**Transforming loan markets through intelligent automation**

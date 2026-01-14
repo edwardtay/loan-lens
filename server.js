@@ -1,9 +1,9 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -13,53 +13,41 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-// Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   next();
 });
 
-// Configure multer for file uploads with security limits
-const storage = multer.memoryStorage();
-const upload = multer({ 
-  storage, 
-  limits: { 
-    fileSize: 50 * 1024 * 1024, // 50MB max
-    files: 1 
-  },
+// File upload configuration
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: (process.env.MAX_FILE_SIZE_MB || 50) * 1024 * 1024, files: 1 },
   fileFilter: (req, file, cb) => {
-    // Only allow PDF files
-    if (file.mimetype === 'application/pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF files are allowed'));
-    }
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Only PDF files allowed'));
   }
 });
 
-// Store analyzed loans in memory (would use DB in production)
+// In-memory storage
 const analyzedLoans = new Map();
 
-// Simple rate limiting
+// Rate limiting
 const requestCounts = new Map();
-const RATE_LIMIT = 100; // requests per minute
-const RATE_WINDOW = 60000; // 1 minute
+const RATE_LIMIT = parseInt(process.env.RATE_LIMIT_REQUESTS) || 100;
+const RATE_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60000;
 
 function rateLimitMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
   
-  if (!requestCounts.has(ip)) {
-    requestCounts.set(ip, []);
-  }
+  if (!requestCounts.has(ip)) requestCounts.set(ip, []);
   
   const requests = requestCounts.get(ip).filter(time => now - time < RATE_WINDOW);
   
   if (requests.length >= RATE_LIMIT) {
-    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    return res.status(429).json({ error: 'Rate limit exceeded' });
   }
   
   requests.push(now);
@@ -67,55 +55,78 @@ function rateLimitMiddleware(req, res, next) {
   next();
 }
 
-// Clean up old rate limit data every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, requests] of requestCounts.entries()) {
-    const recent = requests.filter(time => now - time < RATE_WINDOW);
-    if (recent.length === 0) {
-      requestCounts.delete(ip);
-    } else {
-      requestCounts.set(ip, recent);
-    }
-  }
-}, 300000);
-
-// Apply rate limiting to API routes
 app.use('/api/', rateLimitMiddleware);
 
-// AI-powered loan document analysis
+// AI Enhancement (optional)
+async function enhanceWithAI(text, analysis) {
+  if (process.env.USE_AI_ENHANCEMENT !== 'true') return analysis;
+  
+  try {
+    const provider = process.env.AI_PROVIDER || 'local';
+    
+    if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+      const OpenAI = require('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      
+      const prompt = `Analyze this loan document excerpt and extract key financial terms, covenants, and risks. Return JSON only:\n\n${text.substring(0, 4000)}`;
+      
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4-turbo-preview',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 1000
+      });
+      
+      const aiData = JSON.parse(response.choices[0].message.content);
+      return { ...analysis, aiEnhanced: true, aiInsights: aiData };
+    }
+    
+    if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      
+      const message = await anthropic.messages.create({
+        model: 'claude-3-sonnet-20240229',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Analyze this loan document and extract key terms as JSON:\n\n${text.substring(0, 4000)}`
+        }]
+      });
+      
+      const aiData = JSON.parse(message.content[0].text);
+      return { ...analysis, aiEnhanced: true, aiInsights: aiData };
+    }
+  } catch (error) {
+    console.error('AI enhancement failed:', error.message);
+  }
+  
+  return analysis;
+}
+
+// Core analysis engine
 function analyzeLoanDocument(text) {
-  const analysis = {
+  return {
     id: Date.now().toString(),
     timestamp: new Date().toISOString(),
-    summary: {},
     parties: extractParties(text),
     financialTerms: extractFinancialTerms(text),
     covenants: extractCovenants(text),
     keyDates: extractKeyDates(text),
-    esgClauses: extractESGClauses(text),
-    riskFlags: identifyRiskFlags(text),
+    esgClauses: extractESG(text),
+    riskFlags: extractRisks(text),
     obligations: extractObligations(text)
   };
-  
-  analysis.summary = generateSummary(analysis);
-  return analysis;
 }
 
 function extractParties(text) {
-  const parties = { borrowers: [], lenders: [], agents: [], guarantors: [] };
+  const parties = { borrowers: [], lenders: [], agents: [] };
   
-  // Pattern matching for common party identifiers
   const borrowerPatterns = [
     /(?:borrower|obligor)[:\s]+([A-Z][A-Za-z\s&.,]+(?:Ltd|LLC|Inc|PLC|Limited|Corporation)?)/gi,
     /("Borrower")[:\s]+means\s+([A-Z][A-Za-z\s&.,]+)/gi
   ];
   
-  const lenderPatterns = [
-    /(?:lender|bank)[:\s]+([A-Z][A-Za-z\s&.,]+(?:Bank|N\.A\.|PLC)?)/gi,
-    /("Lender")[:\s]+means\s+([A-Z][A-Za-z\s&.,]+)/gi
-  ];
-
   borrowerPatterns.forEach(pattern => {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
@@ -125,127 +136,96 @@ function extractParties(text) {
       }
     }
   });
-
+  
+  const lenderPatterns = [
+    /(?:lender|bank)[:\s]+([A-Z][A-Za-z\s&.,]+(?:Bank|N\.A\.|PLC)?)/gi
+  ];
+  
   lenderPatterns.forEach(pattern => {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
-      const name = (match[2] || match[1]).trim();
+      const name = match[1].trim();
       if (name.length > 2 && name.length < 100 && !parties.lenders.includes(name)) {
         parties.lenders.push(name);
       }
     }
   });
-
-  // Extract agent references
-  const agentMatch = text.match(/(?:facility\s+)?agent[:\s]+([A-Z][A-Za-z\s&.,]+(?:Bank|N\.A\.)?)/gi);
-  if (agentMatch) {
-    parties.agents = [...new Set(agentMatch.map(m => m.replace(/(?:facility\s+)?agent[:\s]+/i, '').trim()))];
-  }
-
+  
   return parties;
 }
 
 function extractFinancialTerms(text) {
-  const terms = {
-    principalAmount: null,
-    currency: null,
-    interestRate: null,
-    margin: null,
-    referenceRate: null,
-    commitmentFee: null,
-    facilityType: null
-  };
-
-  // Extract principal/facility amount
-  const amountPatterns = [
-    /(?:principal|facility|commitment)\s+(?:amount|sum)[:\s]*(?:of\s+)?(?:up\s+to\s+)?([£$€]\s*[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|m|bn))?)/gi,
-    /([£$€]\s*[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|m|bn))?)\s+(?:facility|loan|credit)/gi
-  ];
-
-  amountPatterns.forEach(pattern => {
-    const match = text.match(pattern);
-    if (match && !terms.principalAmount) {
-      terms.principalAmount = match[1] || match[0];
-    }
-  });
-
-  // Extract currency
-  if (text.includes('$') || text.toLowerCase().includes('usd') || text.toLowerCase().includes('dollar')) {
-    terms.currency = 'USD';
-  } else if (text.includes('£') || text.toLowerCase().includes('gbp') || text.toLowerCase().includes('sterling')) {
-    terms.currency = 'GBP';
-  } else if (text.includes('€') || text.toLowerCase().includes('eur')) {
-    terms.currency = 'EUR';
-  }
-
-  // Extract interest rate/margin
-  const rateMatch = text.match(/(?:interest\s+rate|margin)[:\s]*(?:of\s+)?(\d+(?:\.\d+)?)\s*(?:%|percent|basis\s+points|bps)/gi);
-  if (rateMatch) {
-    terms.interestRate = rateMatch[0];
-  }
-
-  const marginMatch = text.match(/margin[:\s]*(\d+(?:\.\d+)?)\s*(?:%|percent|basis\s+points|bps)/i);
-  if (marginMatch) {
-    terms.margin = marginMatch[1] + (marginMatch[0].toLowerCase().includes('bps') ? ' bps' : '%');
-  }
-
-  // Extract reference rate
-  const refRates = ['SOFR', 'SONIA', 'EURIBOR', 'LIBOR', 'Term SOFR', 'Compounded SOFR'];
-  refRates.forEach(rate => {
+  const terms = {};
+  
+  // Amount
+  const amountMatch = text.match(/(?:principal|facility|commitment)\s+(?:amount|sum)[:\s]*(?:of\s+)?(?:up\s+to\s+)?([£$€]\s*[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|m|bn))?)/i);
+  if (amountMatch) terms.principalAmount = amountMatch[1];
+  
+  // Currency
+  if (text.includes('$') || /usd|dollar/i.test(text)) terms.currency = 'USD';
+  else if (text.includes('£') || /gbp|sterling/i.test(text)) terms.currency = 'GBP';
+  else if (text.includes('€') || /eur/i.test(text)) terms.currency = 'EUR';
+  
+  // Rate
+  const rateMatch = text.match(/(?:interest\s+rate|margin)[:\s]*(?:of\s+)?(\d+(?:\.\d+)?)\s*(?:%|percent|basis\s+points|bps)/i);
+  if (rateMatch) terms.interestRate = rateMatch[0];
+  
+  // Reference rate
+  const refRates = ['SOFR', 'SONIA', 'EURIBOR', 'LIBOR'];
+  for (const rate of refRates) {
     if (text.toUpperCase().includes(rate)) {
       terms.referenceRate = rate;
+      break;
     }
-  });
-
-  // Extract facility type
-  const facilityTypes = ['revolving', 'term loan', 'bridge', 'acquisition', 'working capital', 'syndicated'];
-  facilityTypes.forEach(type => {
+  }
+  
+  // Facility type
+  const types = ['revolving', 'term loan', 'bridge', 'acquisition'];
+  for (const type of types) {
     if (text.toLowerCase().includes(type)) {
       terms.facilityType = type.charAt(0).toUpperCase() + type.slice(1);
+      break;
     }
-  });
-
+  }
+  
   return terms;
 }
 
 function extractCovenants(text) {
-  const covenants = { financial: [], informational: [], negative: [], positive: [] };
-
+  const covenants = { financial: [], informational: [], negative: [] };
+  
   // Financial covenants
   const financialPatterns = [
-    /leverage\s+ratio[^.]*(?:not\s+(?:to\s+)?exceed|less\s+than|greater\s+than)[^.]*[\d.:]+/gi,
-    /interest\s+cover(?:age)?\s+ratio[^.]*(?:not\s+(?:to\s+)?exceed|at\s+least|minimum)[^.]*[\d.:]+/gi,
-    /debt\s+(?:to\s+)?(?:equity|ebitda)[^.]*ratio[^.]*[\d.:]+/gi,
-    /(?:minimum|maximum)\s+(?:net\s+worth|liquidity|cash)[^.]*[\d,£$€]+/gi
+    /leverage\s+ratio[^.]*(?:not\s+(?:to\s+)?exceed|less\s+than)[^.]*[\d.:]+/gi,
+    /interest\s+cover(?:age)?\s+ratio[^.]*(?:at\s+least|minimum)[^.]*[\d.:]+/gi,
+    /(?:minimum|maximum)\s+(?:net\s+worth|liquidity)[^.]*[\d,£$€]+/gi
   ];
-
+  
   financialPatterns.forEach(pattern => {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
-      const covenant = match[0].trim();
-      if (covenant.length > 10 && !covenants.financial.some(c => c.includes(covenant.substring(0, 30)))) {
-        covenants.financial.push(covenant);
+      if (covenants.financial.length < 10) {
+        covenants.financial.push(match[0].trim());
       }
     }
   });
-
-  // Information covenants
+  
+  // Informational
   const infoPatterns = [
-    /(?:deliver|provide|furnish)[^.]*(?:financial\s+statements|accounts|reports)[^.]{0,100}/gi,
-    /(?:annual|quarterly|monthly)\s+(?:financial\s+)?(?:statements|reports|accounts)[^.]{0,50}/gi
+    /(?:deliver|provide|furnish)[^.]*(?:financial\s+statements|accounts|reports)[^.]{0,100}/gi
   ];
-
+  
   infoPatterns.forEach(pattern => {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
-      if (!covenants.informational.includes(match[0].trim())) {
+      if (covenants.informational.length < 10) {
         covenants.informational.push(match[0].trim());
       }
     }
   });
-
-  // Negative covenants
-  const negativeKeywords = ['shall not', 'will not', 'must not', 'prohibited from', 'restriction on'];
+  
+  // Negative
+  const negativeKeywords = ['shall not', 'will not', 'must not', 'prohibited from'];
   negativeKeywords.forEach(keyword => {
     const regex = new RegExp(`${keyword}[^.]{10,150}`, 'gi');
     const matches = text.matchAll(regex);
@@ -255,197 +235,132 @@ function extractCovenants(text) {
       }
     }
   });
-
+  
   return covenants;
 }
 
 function extractKeyDates(text) {
   const dates = [];
   
-  // Date patterns
   const datePatterns = [
     /(?:maturity|termination|expiry)\s+date[:\s]*(\d{1,2}[\s\/\-]\w+[\s\/\-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})/gi,
-    /(?:effective|closing|signing)\s+date[:\s]*(\d{1,2}[\s\/\-]\w+[\s\/\-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})/gi,
-    /(?:repayment|payment)\s+date[:\s]*(\d{1,2}[\s\/\-]\w+[\s\/\-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})/gi
+    /(?:effective|closing)\s+date[:\s]*(\d{1,2}[\s\/\-]\w+[\s\/\-]\d{2,4}|\w+\s+\d{1,2},?\s+\d{4})/gi
   ];
-
+  
   datePatterns.forEach(pattern => {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
-      dates.push({
-        type: match[0].split(/date/i)[0].trim(),
-        date: match[1]
-      });
+      dates.push({ type: match[0].split(/date/i)[0].trim(), date: match[1] });
     }
   });
-
-  // Extract tenor/term
-  const tenorMatch = text.match(/(?:tenor|term)[:\s]*(?:of\s+)?(\d+)\s*(?:year|month|day)s?/i);
-  if (tenorMatch) {
-    dates.push({ type: 'Tenor', date: tenorMatch[0] });
-  }
-
+  
   return dates;
 }
 
-function extractESGClauses(text) {
+function extractESG(text) {
   const esg = {
-    hasESGProvisions: false,
-    sustainabilityLinked: false,
-    greenLoan: false,
+    hasESGProvisions: /esg|sustainability|environmental|green/i.test(text),
+    sustainabilityLinked: /sustainability-linked|sustainability linked/i.test(text),
+    greenLoan: /green loan|green facility/i.test(text),
     kpis: [],
-    targets: [],
-    marginRatchet: false
+    marginRatchet: /margin adjustment|margin ratchet/i.test(text)
   };
-
-  const esgKeywords = ['esg', 'sustainability', 'environmental', 'social', 'governance', 'green', 'climate'];
-  esgKeywords.forEach(keyword => {
-    if (text.toLowerCase().includes(keyword)) {
-      esg.hasESGProvisions = true;
+  
+  const kpiPattern = /(?:kpi|key\s+performance\s+indicator)[:\s]*([^.]+)/gi;
+  const matches = text.matchAll(kpiPattern);
+  for (const match of matches) {
+    if (match[1] && match[1].length > 5 && esg.kpis.length < 5) {
+      esg.kpis.push(match[1].trim());
     }
-  });
-
-  if (text.toLowerCase().includes('sustainability-linked') || text.toLowerCase().includes('sustainability linked')) {
-    esg.sustainabilityLinked = true;
   }
-
-  if (text.toLowerCase().includes('green loan') || text.toLowerCase().includes('green facility')) {
-    esg.greenLoan = true;
-  }
-
-  // Extract KPIs
-  const kpiPatterns = [
-    /(?:kpi|key\s+performance\s+indicator)[:\s]*([^.]+)/gi,
-    /(?:sustainability\s+)?(?:target|metric)[:\s]*([^.]+(?:emission|carbon|renewable|diversity|waste)[^.]*)/gi
-  ];
-
-  kpiPatterns.forEach(pattern => {
-    const matches = text.matchAll(pattern);
-    for (const match of matches) {
-      if (match[1] && match[1].length > 5) {
-        esg.kpis.push(match[1].trim());
-      }
-    }
-  });
-
-  // Check for margin ratchet
-  if (text.toLowerCase().includes('margin adjustment') || text.toLowerCase().includes('margin ratchet')) {
-    esg.marginRatchet = true;
-  }
-
+  
   return esg;
 }
 
-function identifyRiskFlags(text) {
+function extractRisks(text) {
   const risks = [];
-
-  // Check for cross-default provisions
-  if (text.toLowerCase().includes('cross-default') || text.toLowerCase().includes('cross default')) {
+  
+  if (/cross-default|cross default/i.test(text)) {
     risks.push({ type: 'Cross-Default', severity: 'high', description: 'Cross-default provisions detected' });
   }
-
-  // Check for material adverse change
-  if (text.toLowerCase().includes('material adverse change') || text.toLowerCase().includes('mac clause')) {
+  
+  if (/material adverse change|mac clause/i.test(text)) {
     risks.push({ type: 'MAC Clause', severity: 'medium', description: 'Material Adverse Change clause present' });
   }
-
-  // Check for change of control
-  if (text.toLowerCase().includes('change of control')) {
+  
+  if (/change of control/i.test(text)) {
     risks.push({ type: 'Change of Control', severity: 'medium', description: 'Change of control provisions detected' });
   }
-
-  // Check for acceleration clauses
-  if (text.toLowerCase().includes('acceleration') && text.toLowerCase().includes('event of default')) {
+  
+  if (/acceleration/i.test(text) && /event of default/i.test(text)) {
     risks.push({ type: 'Acceleration', severity: 'high', description: 'Acceleration upon default provisions' });
   }
-
+  
   return risks;
 }
 
 function extractObligations(text) {
   const obligations = [];
-
-  // Reporting obligations
-  const reportingPatterns = [
-    /(?:shall|must|will)\s+(?:deliver|provide|furnish)[^.]*(?:within|by|no\s+later\s+than)\s+(\d+)\s*(?:days?|business\s+days?)/gi
-  ];
-
-  reportingPatterns.forEach(pattern => {
-    const matches = text.matchAll(pattern);
-    for (const match of matches) {
+  
+  const pattern = /(?:shall|must|will)\s+(?:deliver|provide|furnish)[^.]*(?:within|by|no\s+later\s+than)\s+(\d+)\s*(?:days?|business\s+days?)/gi;
+  const matches = text.matchAll(pattern);
+  
+  for (const match of matches) {
+    if (obligations.length < 10) {
       obligations.push({
         type: 'Reporting',
         description: match[0].trim(),
         deadline: match[1] + ' days'
       });
     }
-  });
-
+  }
+  
   return obligations;
-}
-
-function generateSummary(analysis) {
-  return {
-    totalParties: analysis.parties.borrowers.length + analysis.parties.lenders.length,
-    totalCovenants: analysis.covenants.financial.length + analysis.covenants.informational.length + analysis.covenants.negative.length,
-    totalRisks: analysis.riskFlags.length,
-    hasESG: analysis.esgClauses.hasESGProvisions,
-    keyMetrics: {
-      amount: analysis.financialTerms.principalAmount,
-      currency: analysis.financialTerms.currency,
-      rate: analysis.financialTerms.interestRate,
-      type: analysis.financialTerms.facilityType
-    }
-  };
 }
 
 // API Routes
 app.post('/api/analyze', upload.single('document'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    
     const data = await pdfParse(req.file.buffer);
-    const analysis = analyzeLoanDocument(data.text);
+    let analysis = analyzeLoanDocument(data.text);
+    
     analysis.fileName = req.file.originalname;
     analysis.pageCount = data.numpages;
-    analysis.textLength = data.text.length;
+    
+    // AI enhancement (optional)
+    analysis = await enhanceWithAI(data.text, analysis);
     
     analyzedLoans.set(analysis.id, analysis);
-    
     res.json(analysis);
   } catch (error) {
     console.error('Analysis error:', error);
-    res.status(500).json({ error: 'Failed to analyze document', details: error.message });
+    res.status(500).json({ error: 'Analysis failed', details: error.message });
   }
 });
 
-app.post('/api/analyze-text', express.json(), (req, res) => {
+app.post('/api/analyze-text', async (req, res) => {
   try {
-    const { text, name } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: 'No text provided' });
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'No text provided' });
+    
+    const maxLength = (process.env.MAX_TEXT_LENGTH_MB || 5) * 1024 * 1024;
+    if (text.length > maxLength) {
+      return res.status(400).json({ error: 'Text too long' });
     }
-
-    // Security: Limit text length
-    if (text.length > 5000000) { // 5MB text limit
-      return res.status(400).json({ error: 'Text too long. Maximum 5MB allowed.' });
-    }
-
-    // Sanitize name input
-    const sanitizedName = name ? name.substring(0, 255).replace(/[<>]/g, '') : 'Pasted Text';
-
-    const analysis = analyzeLoanDocument(text);
-    analysis.fileName = sanitizedName;
-    analysis.textLength = text.length;
+    
+    let analysis = analyzeLoanDocument(text);
+    analysis.fileName = 'Text Input';
+    
+    // AI enhancement (optional)
+    analysis = await enhanceWithAI(text, analysis);
     
     analyzedLoans.set(analysis.id, analysis);
-    
     res.json(analysis);
   } catch (error) {
     console.error('Analysis error:', error);
-    res.status(500).json({ error: 'Failed to analyze text', details: error.message });
+    res.status(500).json({ error: 'Analysis failed', details: error.message });
   }
 });
 
@@ -454,30 +369,21 @@ app.get('/api/loans', (req, res) => {
 });
 
 app.get('/api/loans/:id', (req, res) => {
-  // Sanitize ID input
   const id = req.params.id.replace(/[^a-zA-Z0-9]/g, '');
   const loan = analyzedLoans.get(id);
-  if (!loan) {
-    return res.status(404).json({ error: 'Loan not found' });
-  }
+  if (!loan) return res.status(404).json({ error: 'Loan not found' });
   res.json(loan);
 });
 
 app.get('/api/compare', (req, res) => {
   const ids = req.query.ids?.split(',').map(id => id.replace(/[^a-zA-Z0-9]/g, '')) || [];
   
-  // Security: Limit number of comparisons
-  if (ids.length > 10) {
-    return res.status(400).json({ error: 'Maximum 10 loans can be compared at once' });
-  }
+  if (ids.length > 10) return res.status(400).json({ error: 'Maximum 10 loans' });
+  if (ids.length < 2) return res.status(400).json({ error: 'Need at least 2 loans' });
   
   const loans = ids.map(id => analyzedLoans.get(id)).filter(Boolean);
   
-  if (loans.length < 2) {
-    return res.status(400).json({ error: 'Need at least 2 loans to compare' });
-  }
-
-  const comparison = {
+  res.json({
     loans: loans.map(l => ({ id: l.id, name: l.fileName })),
     financialTerms: loans.map(l => l.financialTerms),
     covenantCounts: loans.map(l => ({
@@ -486,255 +392,16 @@ app.get('/api/compare', (req, res) => {
       negative: l.covenants.negative.length
     })),
     riskComparison: loans.map(l => l.riskFlags),
-    esgComparison: loans.map(l => l.esgClauses),
-    inconsistencies: detectInconsistencies(loans)
-  };
-
-  res.json(comparison);
-});
-
-// Detect inconsistencies across loans
-function detectInconsistencies(loans) {
-  const issues = [];
-  
-  // Check for currency mismatches
-  const currencies = loans.map(l => l.financialTerms.currency).filter(Boolean);
-  if (new Set(currencies).size > 1) {
-    issues.push({
-      type: 'Currency Mismatch',
-      severity: 'high',
-      description: `Multiple currencies detected: ${[...new Set(currencies)].join(', ')}`,
-      affectedLoans: loans.filter(l => l.financialTerms.currency).map(l => l.fileName)
-    });
-  }
-  
-  // Check for reference rate inconsistencies
-  const refRates = loans.map(l => l.financialTerms.referenceRate).filter(Boolean);
-  if (new Set(refRates).size > 1) {
-    issues.push({
-      type: 'Reference Rate Variation',
-      severity: 'medium',
-      description: `Different reference rates used: ${[...new Set(refRates)].join(', ')}`,
-      affectedLoans: loans.filter(l => l.financialTerms.referenceRate).map(l => l.fileName)
-    });
-  }
-  
-  // Check for ESG inconsistencies
-  const esgLoans = loans.filter(l => l.esgClauses.hasESGProvisions);
-  const nonEsgLoans = loans.filter(l => !l.esgClauses.hasESGProvisions);
-  if (esgLoans.length > 0 && nonEsgLoans.length > 0) {
-    issues.push({
-      type: 'ESG Inconsistency',
-      severity: 'medium',
-      description: `${esgLoans.length} loan(s) have ESG provisions, ${nonEsgLoans.length} do not`,
-      affectedLoans: nonEsgLoans.map(l => l.fileName)
-    });
-  }
-  
-  // Check for risk profile differences
-  const highRiskLoans = loans.filter(l => l.riskFlags.some(r => r.severity === 'high'));
-  if (highRiskLoans.length > 0 && highRiskLoans.length < loans.length) {
-    issues.push({
-      type: 'Risk Profile Variation',
-      severity: 'high',
-      description: `${highRiskLoans.length} loan(s) contain high-severity risk flags`,
-      affectedLoans: highRiskLoans.map(l => l.fileName)
-    });
-  }
-  
-  return issues;
-}
-
-// Covenant compliance calculator
-app.post('/api/calculate-compliance', express.json(), (req, res) => {
-  try {
-    const { loanId, actualMetrics } = req.body;
-    
-    // Sanitize and validate inputs
-    const sanitizedId = String(loanId).replace(/[^a-zA-Z0-9]/g, '');
-    const loan = analyzedLoans.get(sanitizedId);
-    
-    if (!loan) {
-      return res.status(404).json({ error: 'Loan not found' });
-    }
-    
-    // Validate actualMetrics
-    if (!actualMetrics || typeof actualMetrics !== 'object') {
-      return res.status(400).json({ error: 'Invalid metrics provided' });
-    }
-    
-    // Validate numeric values
-    const validatedMetrics = {};
-    ['leverageRatio', 'interestCoverageRatio', 'netWorth'].forEach(key => {
-      if (actualMetrics[key] !== undefined) {
-        const value = parseFloat(actualMetrics[key]);
-        if (isNaN(value) || !isFinite(value)) {
-          return res.status(400).json({ error: `Invalid value for ${key}` });
-        }
-        validatedMetrics[key] = value;
-      }
-    });
-    
-    const compliance = calculateCovenantCompliance(loan, validatedMetrics);
-    res.json(compliance);
-  } catch (error) {
-    console.error('Compliance calculation error:', error);
-    res.status(500).json({ error: 'Compliance calculation failed', details: error.message });
-  }
-});
-
-function calculateCovenantCompliance(loan, actualMetrics) {
-  const results = [];
-  
-  // Parse financial covenants and check compliance
-  loan.covenants.financial.forEach(covenant => {
-    const covenantText = covenant.toLowerCase();
-    
-    // Leverage Ratio check
-    if (covenantText.includes('leverage') && covenantText.includes('ratio')) {
-      const match = covenant.match(/(\d+\.?\d*):1/);
-      if (match && actualMetrics.leverageRatio !== undefined) {
-        const threshold = parseFloat(match[1]);
-        const actual = actualMetrics.leverageRatio;
-        const compliant = actual <= threshold;
-        const buffer = threshold - actual;
-        
-        results.push({
-          covenant: 'Leverage Ratio',
-          threshold: `${threshold}:1`,
-          actual: `${actual}:1`,
-          compliant,
-          buffer: buffer.toFixed(2),
-          status: compliant ? 'pass' : 'breach',
-          severity: !compliant ? 'critical' : (buffer < 0.5 ? 'warning' : 'healthy')
-        });
-      }
-    }
-    
-    // Interest Coverage Ratio check
-    if (covenantText.includes('interest') && covenantText.includes('cover')) {
-      const match = covenant.match(/(\d+\.?\d*):1/);
-      if (match && actualMetrics.interestCoverageRatio !== undefined) {
-        const threshold = parseFloat(match[1]);
-        const actual = actualMetrics.interestCoverageRatio;
-        const compliant = actual >= threshold;
-        const buffer = actual - threshold;
-        
-        results.push({
-          covenant: 'Interest Coverage Ratio',
-          threshold: `${threshold}:1`,
-          actual: `${actual}:1`,
-          compliant,
-          buffer: buffer.toFixed(2),
-          status: compliant ? 'pass' : 'breach',
-          severity: !compliant ? 'critical' : (buffer < 0.5 ? 'warning' : 'healthy')
-        });
-      }
-    }
-    
-    // Net Worth check
-    if (covenantText.includes('net worth') || covenantText.includes('minimum')) {
-      const match = covenant.match(/\$?([\d,]+(?:,\d{3})*(?:\.\d+)?)\s*(?:million|m)?/i);
-      if (match && actualMetrics.netWorth !== undefined) {
-        let threshold = parseFloat(match[1].replace(/,/g, ''));
-        if (covenant.toLowerCase().includes('million')) {
-          threshold *= 1000000;
-        }
-        const actual = actualMetrics.netWorth;
-        const compliant = actual >= threshold;
-        const buffer = actual - threshold;
-        
-        results.push({
-          covenant: 'Minimum Net Worth',
-          threshold: `$${(threshold / 1000000).toFixed(1)}M`,
-          actual: `$${(actual / 1000000).toFixed(1)}M`,
-          compliant,
-          buffer: `$${(buffer / 1000000).toFixed(1)}M`,
-          status: compliant ? 'pass' : 'breach',
-          severity: !compliant ? 'critical' : (buffer < threshold * 0.1 ? 'warning' : 'healthy')
-        });
-      }
-    }
+    esgComparison: loans.map(l => l.esgClauses)
   });
-  
-  const breaches = results.filter(r => !r.compliant).length;
-  const warnings = results.filter(r => r.severity === 'warning').length;
-  
-  return {
-    summary: {
-      totalCovenants: results.length,
-      breaches,
-      warnings,
-      healthy: results.length - breaches - warnings,
-      overallStatus: breaches > 0 ? 'breach' : (warnings > 0 ? 'warning' : 'compliant')
-    },
-    details: results,
-    timestamp: new Date().toISOString()
-  };
-}
+});
 
-// Demo data endpoint
-app.get('/api/demo', (req, res) => {
-  const demoText = `
-    FACILITY AGREEMENT dated January 10, 2026
-    
-    BORROWER: Acme Corporation Limited
-    LENDER: Global Bank PLC
-    FACILITY AGENT: Global Bank PLC
-    
-    FACILITY AMOUNT: $500,000,000 (Five Hundred Million Dollars)
-    
-    This Term Loan Facility Agreement sets out the terms under which the Lender agrees to make available 
-    to the Borrower a revolving credit facility.
-    
-    INTEREST: The interest rate shall be Term SOFR plus a margin of 2.50% per annum (250 basis points).
-    
-    MATURITY DATE: January 10, 2031
-    EFFECTIVE DATE: January 15, 2026
-    
-    FINANCIAL COVENANTS:
-    - Leverage Ratio: The Borrower shall ensure that the Leverage Ratio does not exceed 3.5:1
-    - Interest Coverage Ratio: The Borrower shall maintain an Interest Coverage Ratio of at least 4.0:1
-    - Minimum Net Worth: The Borrower shall maintain minimum net worth of $100,000,000
-    
-    INFORMATION COVENANTS:
-    The Borrower shall deliver annual financial statements within 120 days of each financial year end.
-    The Borrower shall provide quarterly management accounts within 45 days of each quarter end.
-    
-    NEGATIVE COVENANTS:
-    The Borrower shall not create any security over its assets without prior consent.
-    The Borrower shall not dispose of any material assets.
-    The Borrower will not make any acquisitions exceeding $50,000,000 without consent.
-    
-    EVENTS OF DEFAULT:
-    Cross-default provisions shall apply to any indebtedness exceeding $10,000,000.
-    Material Adverse Change clause: Any MAC shall constitute an Event of Default.
-    Change of Control: Any change of control shall require mandatory prepayment.
-    
-    Upon an Event of Default, the Lender may declare all amounts immediately due and payable (acceleration).
-    
-    SUSTAINABILITY-LINKED PROVISIONS:
-    This is a Sustainability-Linked Loan with the following KPIs:
-    - KPI 1: Reduce carbon emissions by 25% by 2028
-    - KPI 2: Achieve 50% renewable energy usage by 2027
-    
-    Margin Adjustment: The margin shall be reduced by 5 basis points upon achievement of each KPI target.
-    
-    ESG Reporting: The Borrower shall provide annual sustainability reports.
-  `;
-
-  const analysis = analyzeLoanDocument(demoText);
-  analysis.fileName = 'Demo_Facility_Agreement.pdf';
-  analysis.pageCount = 45;
-  analysis.textLength = demoText.length;
-  analysis.isDemo = true;
-  
-  analyzedLoans.set(analysis.id, analysis);
-  
-  res.json(analysis);
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 LoanLens server running on http://localhost:${PORT}`);
-  console.log('📄 Upload loan documents to analyze them');
+  console.log(`🚀 LoanLens running on http://localhost:${PORT}`);
+  console.log(`📊 AI Enhancement: ${process.env.USE_AI_ENHANCEMENT === 'true' ? 'Enabled' : 'Disabled'}`);
 });

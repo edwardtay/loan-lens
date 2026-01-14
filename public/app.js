@@ -1,39 +1,29 @@
-// LoanLens - AI-Powered Loan Document Intelligence
-// LMA Edge Hackathon 2026
-
+// LoanLens - Client Application
 let currentAnalysis = null;
 let analyzedLoans = [];
 
 // DOM Elements
+const tabs = document.querySelectorAll('.tab');
 const views = document.querySelectorAll('.view');
-const navLinks = document.querySelectorAll('.nav-links a');
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
-const pasteText = document.getElementById('pasteText');
-const analyzeTextBtn = document.getElementById('analyzeTextBtn');
-const loadDemoBtn = document.getElementById('loadDemoBtn');
-const loadingOverlay = document.getElementById('loadingOverlay');
+const textInput = document.getElementById('textInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const loading = document.getElementById('loading');
+const results = document.getElementById('results');
 
 // Navigation
-navLinks.forEach(link => {
-  link.addEventListener('click', (e) => {
-    e.preventDefault();
-    const viewId = link.dataset.view;
-    switchView(viewId);
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const viewId = tab.dataset.view;
+    tabs.forEach(t => t.classList.remove('active'));
+    views.forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`${viewId}-view`).classList.add('active');
+    
+    if (viewId === 'compare') loadCompareView();
   });
 });
-
-function switchView(viewId) {
-  views.forEach(v => v.classList.remove('active'));
-  navLinks.forEach(l => l.classList.remove('active'));
-  
-  document.getElementById(`${viewId}-view`).classList.add('active');
-  document.querySelector(`[data-view="${viewId}"]`).classList.add('active');
-  
-  if (viewId === 'compare') {
-    loadLoanSelector();
-  }
-}
 
 // File Upload
 dropZone.addEventListener('click', () => fileInput.click());
@@ -51,18 +41,13 @@ dropZone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropZone.classList.remove('dragover');
   const file = e.dataTransfer.files[0];
-  if (file && file.type === 'application/pdf') {
-    uploadFile(file);
-  } else {
-    alert('Please upload a PDF file');
-  }
+  if (file?.type === 'application/pdf') uploadFile(file);
+  else showToast('Please upload a PDF file');
 });
 
 fileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
-  if (file) {
-    uploadFile(file);
-  }
+  if (file) uploadFile(file);
 });
 
 async function uploadFile(file) {
@@ -84,19 +69,19 @@ async function uploadFile(file) {
     analyzedLoans.push(analysis);
     
     hideLoading();
-    displayAnalysis(analysis);
-    switchView('dashboard');
+    displayResults(analysis);
+    showToast('Analysis complete');
   } catch (error) {
     hideLoading();
-    alert('Error analyzing document: ' + error.message);
+    showToast('Error: ' + error.message);
   }
 }
 
 // Text Analysis
-analyzeTextBtn.addEventListener('click', async () => {
-  const text = pasteText.value.trim();
+analyzeBtn.addEventListener('click', async () => {
+  const text = textInput.value.trim();
   if (!text) {
-    alert('Please paste some text to analyze');
+    showToast('Please enter text to analyze');
     return;
   }
   
@@ -106,7 +91,7 @@ analyzeTextBtn.addEventListener('click', async () => {
     const response = await fetch('/api/analyze-text', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, name: 'Pasted Document' })
+      body: JSON.stringify({ text })
     });
     
     if (!response.ok) throw new Error('Analysis failed');
@@ -116,271 +101,147 @@ analyzeTextBtn.addEventListener('click', async () => {
     analyzedLoans.push(analysis);
     
     hideLoading();
-    displayAnalysis(analysis);
-    switchView('dashboard');
+    displayResults(analysis);
+    showToast('Analysis complete');
   } catch (error) {
     hideLoading();
-    alert('Error analyzing text: ' + error.message);
+    showToast('Error: ' + error.message);
   }
 });
 
-// Demo
-loadDemoBtn.addEventListener('click', async () => {
-  showLoading();
+// Display Results
+function displayResults(analysis) {
+  results.classList.remove('hidden');
   
-  try {
-    const response = await fetch('/api/demo');
-    if (!response.ok) throw new Error('Failed to load demo');
-    
-    const analysis = await response.json();
-    currentAnalysis = analysis;
-    analyzedLoans.push(analysis);
-    
-    hideLoading();
-    displayAnalysis(analysis);
-    switchView('dashboard');
-  } catch (error) {
-    hideLoading();
-    alert('Error loading demo: ' + error.message);
-  }
-});
-
-// Loading
-function showLoading() {
-  loadingOverlay.classList.remove('hidden');
-}
-
-function hideLoading() {
-  loadingOverlay.classList.add('hidden');
-}
-
-// Display Analysis
-function displayAnalysis(analysis) {
-  // Document name
-  document.getElementById('docName').textContent = analysis.fileName || 'Document Analysis';
+  // Title
+  document.getElementById('docTitle').textContent = analysis.fileName || 'Analysis Results';
   
-  // Summary cards
-  document.getElementById('summaryAmount').textContent = 
-    analysis.financialTerms.principalAmount || 'Not found';
-  document.getElementById('summaryRate').textContent = 
-    analysis.financialTerms.margin || analysis.financialTerms.interestRate || 'Not found';
-  document.getElementById('summaryCovenant').textContent = 
-    analysis.summary.totalCovenants || '0';
-  document.getElementById('summaryRisks').textContent = 
-    analysis.summary.totalRisks || '0';
-  
-  // Parties
-  displayParties(analysis.parties);
+  // Metrics
+  document.getElementById('metricAmount').textContent = 
+    analysis.financialTerms.principalAmount || '-';
+  document.getElementById('metricRate').textContent = 
+    analysis.financialTerms.interestRate || analysis.financialTerms.margin || '-';
+  document.getElementById('metricCovenants').textContent = 
+    (analysis.covenants.financial.length + analysis.covenants.informational.length + analysis.covenants.negative.length) || '0';
+  document.getElementById('metricRisks').textContent = 
+    analysis.riskFlags.length || '0';
   
   // Financial Terms
-  displayFinancialTerms(analysis.financialTerms);
+  const financialTerms = document.getElementById('financialTerms');
+  const terms = [
+    { label: 'Amount', value: analysis.financialTerms.principalAmount },
+    { label: 'Currency', value: analysis.financialTerms.currency },
+    { label: 'Reference Rate', value: analysis.financialTerms.referenceRate },
+    { label: 'Interest Rate', value: analysis.financialTerms.interestRate },
+    { label: 'Facility Type', value: analysis.financialTerms.facilityType }
+  ].filter(t => t.value);
   
-  // Key Dates
-  displayKeyDates(analysis.keyDates);
+  financialTerms.innerHTML = terms.length ? 
+    terms.map(t => `
+      <div class="data-row">
+        <span class="data-label">${t.label}</span>
+        <span class="data-value">${escapeHtml(t.value)}</span>
+      </div>
+    `).join('') : '<p>No financial terms detected</p>';
   
-  // ESG
-  displayESG(analysis.esgClauses);
+  // Parties
+  const parties = document.getElementById('parties');
+  let partiesHTML = '';
+  
+  if (analysis.parties.borrowers.length) {
+    partiesHTML += '<p><strong>Borrowers:</strong></p>';
+    partiesHTML += analysis.parties.borrowers.map(b => `<span class="tag">${escapeHtml(b)}</span>`).join('');
+  }
+  
+  if (analysis.parties.lenders.length) {
+    partiesHTML += '<p><strong>Lenders:</strong></p>';
+    partiesHTML += analysis.parties.lenders.map(l => `<span class="tag">${escapeHtml(l)}</span>`).join('');
+  }
+  
+  parties.innerHTML = partiesHTML || '<p>No parties detected</p>';
   
   // Covenants
-  displayCovenants(analysis.covenants);
+  const covenants = document.getElementById('covenants');
+  let covenantsHTML = '';
+  
+  if (analysis.covenants.financial.length) {
+    covenantsHTML += '<p><strong>Financial:</strong></p>';
+    covenantsHTML += analysis.covenants.financial.map(c => 
+      `<div class="risk-item low">${escapeHtml(c)}</div>`
+    ).join('');
+  }
+  
+  if (analysis.covenants.informational.length) {
+    covenantsHTML += '<p><strong>Informational:</strong></p>';
+    covenantsHTML += analysis.covenants.informational.map(c => 
+      `<div class="risk-item low">${escapeHtml(c)}</div>`
+    ).join('');
+  }
+  
+  if (analysis.covenants.negative.length) {
+    covenantsHTML += '<p><strong>Negative:</strong></p>';
+    covenantsHTML += analysis.covenants.negative.map(c => 
+      `<div class="risk-item low">${escapeHtml(c)}</div>`
+    ).join('');
+  }
+  
+  covenants.innerHTML = covenantsHTML || '<p>No covenants detected</p>';
   
   // Risks
-  displayRisks(analysis.riskFlags);
-}
-
-function displayParties(parties) {
-  const container = document.getElementById('partiesContent');
-  let html = '';
-  
-  if (parties.borrowers.length) {
-    html += `
-      <div class="party-group">
-        <div class="party-label">Borrowers</div>
-        <div class="party-tags">
-          ${parties.borrowers.map(b => `<span class="tag">${escapeHtml(b)}</span>`).join('')}
-        </div>
+  const risks = document.getElementById('risks');
+  risks.innerHTML = analysis.riskFlags.length ?
+    analysis.riskFlags.map(r => `
+      <div class="risk-item ${r.severity}">
+        <h4>${escapeHtml(r.type)}</h4>
+        <p>${escapeHtml(r.description)}</p>
       </div>
-    `;
+    `).join('') : '<p>No risk flags detected</p>';
+  
+  // ESG
+  const esg = document.getElementById('esg');
+  let esgHTML = '<div>';
+  esgHTML += `<p>ESG Provisions: ${analysis.esgClauses.hasESGProvisions ? '✓' : '✗'}</p>`;
+  esgHTML += `<p>Sustainability-Linked: ${analysis.esgClauses.sustainabilityLinked ? '✓' : '✗'}</p>`;
+  esgHTML += `<p>Green Loan: ${analysis.esgClauses.greenLoan ? '✓' : '✗'}</p>`;
+  esgHTML += `<p>Margin Ratchet: ${analysis.esgClauses.marginRatchet ? '✓' : '✗'}</p>`;
+  
+  if (analysis.esgClauses.kpis.length) {
+    esgHTML += '<p><strong>KPIs:</strong></p>';
+    esgHTML += analysis.esgClauses.kpis.map(k => `<div class="risk-item low">${escapeHtml(k)}</div>`).join('');
   }
   
-  if (parties.lenders.length) {
-    html += `
-      <div class="party-group">
-        <div class="party-label">Lenders</div>
-        <div class="party-tags">
-          ${parties.lenders.map(l => `<span class="tag">${escapeHtml(l)}</span>`).join('')}
-        </div>
-      </div>
-    `;
-  }
+  esgHTML += '</div>';
+  esg.innerHTML = esgHTML;
   
-  if (parties.agents.length) {
-    html += `
-      <div class="party-group">
-        <div class="party-label">Agents</div>
-        <div class="party-tags">
-          ${parties.agents.map(a => `<span class="tag">${escapeHtml(a)}</span>`).join('')}
-        </div>
-      </div>
-    `;
-  }
-  
-  container.innerHTML = html || '<div class="empty-state"><i class="fas fa-users"></i><p>No parties detected</p></div>';
-}
-
-function displayFinancialTerms(terms) {
-  const container = document.getElementById('financialContent');
-  const rows = [
-    { label: 'Principal Amount', value: terms.principalAmount },
-    { label: 'Currency', value: terms.currency },
-    { label: 'Reference Rate', value: terms.referenceRate },
-    { label: 'Margin', value: terms.margin },
-    { label: 'Facility Type', value: terms.facilityType }
-  ].filter(r => r.value);
-  
-  if (rows.length) {
-    container.innerHTML = rows.map(r => `
-      <div class="data-row">
-        <span class="data-label">${r.label}</span>
-        <span class="data-value">${escapeHtml(r.value)}</span>
-      </div>
-    `).join('');
-  } else {
-    container.innerHTML = '<div class="empty-state"><i class="fas fa-coins"></i><p>No financial terms detected</p></div>';
-  }
-}
-
-function displayKeyDates(dates) {
-  const container = document.getElementById('datesContent');
-  
-  if (dates.length) {
-    container.innerHTML = dates.map(d => `
-      <div class="data-row">
-        <span class="data-label">${escapeHtml(d.type)}</span>
-        <span class="data-value">${escapeHtml(d.date)}</span>
-      </div>
-    `).join('');
-  } else {
-    container.innerHTML = '<div class="empty-state"><i class="fas fa-calendar"></i><p>No key dates detected</p></div>';
-  }
-}
-
-function displayESG(esg) {
-  const container = document.getElementById('esgContent');
-  
-  let html = '<div class="esg-badges">';
-  html += `<span class="esg-badge ${esg.hasESGProvisions ? 'active' : 'inactive'}">
-    <i class="fas fa-${esg.hasESGProvisions ? 'check' : 'times'}"></i> ESG Provisions
-  </span>`;
-  html += `<span class="esg-badge ${esg.sustainabilityLinked ? 'active' : 'inactive'}">
-    <i class="fas fa-${esg.sustainabilityLinked ? 'check' : 'times'}"></i> Sustainability-Linked
-  </span>`;
-  html += `<span class="esg-badge ${esg.greenLoan ? 'active' : 'inactive'}">
-    <i class="fas fa-${esg.greenLoan ? 'check' : 'times'}"></i> Green Loan
-  </span>`;
-  html += `<span class="esg-badge ${esg.marginRatchet ? 'active' : 'inactive'}">
-    <i class="fas fa-${esg.marginRatchet ? 'check' : 'times'}"></i> Margin Ratchet
-  </span>`;
-  html += '</div>';
-  
-  if (esg.kpis.length) {
-    html += '<div class="kpi-list">';
-    html += '<div class="party-label">KPIs & Targets</div>';
-    esg.kpis.forEach(kpi => {
-      html += `<div class="kpi-item"><i class="fas fa-bullseye"></i> ${escapeHtml(kpi)}</div>`;
-    });
-    html += '</div>';
-  }
-  
-  container.innerHTML = html;
-}
-
-function displayCovenants(covenants) {
-  const container = document.getElementById('covenantsContent');
-  
-  // Set up tabs
-  const tabs = document.querySelectorAll('.tab');
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      showCovenantTab(tab.dataset.tab, covenants);
-    });
-  });
-  
-  // Show financial by default
-  showCovenantTab('financial', covenants);
-}
-
-function showCovenantTab(type, covenants) {
-  const container = document.getElementById('covenantsContent');
-  const items = covenants[type] || [];
-  
-  if (items.length) {
-    container.innerHTML = `
-      <ul class="covenant-list">
-        ${items.map(c => `<li class="covenant-item">${escapeHtml(c)}</li>`).join('')}
-      </ul>
-    `;
-  } else {
-    container.innerHTML = `<div class="empty-state"><i class="fas fa-gavel"></i><p>No ${type} covenants detected</p></div>`;
-  }
-}
-
-function displayRisks(risks) {
-  const container = document.getElementById('risksContent');
-  
-  if (risks.length) {
-    container.innerHTML = `
-      <div class="risk-grid">
-        ${risks.map(r => `
-          <div class="risk-item ${r.severity}">
-            <div class="risk-icon">
-              <i class="fas fa-exclamation-triangle"></i>
-            </div>
-            <div class="risk-content">
-              <h4>${escapeHtml(r.type)}</h4>
-              <p>${escapeHtml(r.description)}</p>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  } else {
-    container.innerHTML = '<div class="empty-state"><i class="fas fa-shield-alt"></i><p>No risk flags detected</p></div>';
-  }
+  // Scroll to results
+  results.scrollIntoView({ behavior: 'smooth' });
 }
 
 // Compare View
-function loadLoanSelector() {
-  const container = document.getElementById('loanCheckboxes');
-  const compareBtn = document.getElementById('compareBtn');
+function loadCompareView() {
+  const compareList = document.getElementById('compareList');
   
   if (analyzedLoans.length < 2) {
-    container.innerHTML = '<p>Analyze at least 2 documents to compare them.</p>';
-    compareBtn.disabled = true;
+    compareList.innerHTML = '<p>Analyze at least 2 documents to compare them.</p>';
     return;
   }
   
-  container.innerHTML = analyzedLoans.map(loan => `
-    <label class="loan-checkbox">
+  compareList.innerHTML = analyzedLoans.map(loan => `
+    <label class="compare-item">
       <input type="checkbox" value="${loan.id}">
-      ${escapeHtml(loan.fileName)}
+      <span>${escapeHtml(loan.fileName)}</span>
     </label>
   `).join('');
   
-  const checkboxes = container.querySelectorAll('input');
+  const checkboxes = compareList.querySelectorAll('input[type="checkbox"]');
   checkboxes.forEach(cb => {
     cb.addEventListener('change', () => {
-      const checked = container.querySelectorAll('input:checked');
-      compareBtn.disabled = checked.length < 2;
+      const selected = Array.from(checkboxes).filter(c => c.checked);
+      if (selected.length >= 2) {
+        compareLoans(selected.map(c => c.value));
+      }
     });
   });
-  
-  compareBtn.onclick = () => {
-    const selected = Array.from(container.querySelectorAll('input:checked')).map(cb => cb.value);
-    compareLoans(selected);
-  };
 }
 
 async function compareLoans(ids) {
@@ -391,110 +252,46 @@ async function compareLoans(ids) {
     const comparison = await response.json();
     displayComparison(comparison);
   } catch (error) {
-    alert('Error comparing loans: ' + error.message);
+    showToast('Error: ' + error.message);
   }
 }
 
 function displayComparison(comparison) {
-  const container = document.getElementById('comparisonResults');
-  container.classList.remove('hidden');
+  const compareResults = document.getElementById('compareResults');
+  compareResults.classList.remove('hidden');
   
   const headers = comparison.loans.map(l => `<th>${escapeHtml(l.name)}</th>`).join('');
   
   let html = `
-    <div class="card">
-      <div class="card-header"><h3><i class="fas fa-coins"></i> Financial Terms</h3></div>
-      <div class="card-body">
-        <table class="comparison-table">
-          <thead>
-            <tr><th>Term</th>${headers}</tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Amount</td>
-              ${comparison.financialTerms.map(t => `<td>${t.principalAmount || '-'}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Currency</td>
-              ${comparison.financialTerms.map(t => `<td>${t.currency || '-'}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Reference Rate</td>
-              ${comparison.financialTerms.map(t => `<td>${t.referenceRate || '-'}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Margin</td>
-              ${comparison.financialTerms.map(t => `<td>${t.margin || '-'}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Facility Type</td>
-              ${comparison.financialTerms.map(t => `<td>${t.facilityType || '-'}</td>`).join('')}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <h3>Financial Terms</h3>
+    <table>
+      <tr><th>Term</th>${headers}</tr>
+      <tr><td>Amount</td>${comparison.financialTerms.map(t => `<td>${t.principalAmount || '-'}</td>`).join('')}</tr>
+      <tr><td>Currency</td>${comparison.financialTerms.map(t => `<td>${t.currency || '-'}</td>`).join('')}</tr>
+      <tr><td>Rate</td>${comparison.financialTerms.map(t => `<td>${t.interestRate || '-'}</td>`).join('')}</tr>
+    </table>
     
-    <div class="card">
-      <div class="card-header"><h3><i class="fas fa-gavel"></i> Covenant Counts</h3></div>
-      <div class="card-body">
-        <table class="comparison-table">
-          <thead>
-            <tr><th>Type</th>${headers}</tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Financial</td>
-              ${comparison.covenantCounts.map(c => `<td>${c.financial}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Informational</td>
-              ${comparison.covenantCounts.map(c => `<td>${c.informational}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Negative</td>
-              ${comparison.covenantCounts.map(c => `<td>${c.negative}</td>`).join('')}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <h3>Covenants</h3>
+    <table>
+      <tr><th>Type</th>${headers}</tr>
+      <tr><td>Financial</td>${comparison.covenantCounts.map(c => `<td>${c.financial}</td>`).join('')}</tr>
+      <tr><td>Informational</td>${comparison.covenantCounts.map(c => `<td>${c.informational}</td>`).join('')}</tr>
+      <tr><td>Negative</td>${comparison.covenantCounts.map(c => `<td>${c.negative}</td>`).join('')}</tr>
+    </table>
     
-    <div class="card">
-      <div class="card-header"><h3><i class="fas fa-leaf"></i> ESG Comparison</h3></div>
-      <div class="card-body">
-        <table class="comparison-table">
-          <thead>
-            <tr><th>Feature</th>${headers}</tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>ESG Provisions</td>
-              ${comparison.esgComparison.map(e => `<td>${e.hasESGProvisions ? '✓' : '✗'}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Sustainability-Linked</td>
-              ${comparison.esgComparison.map(e => `<td>${e.sustainabilityLinked ? '✓' : '✗'}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Green Loan</td>
-              ${comparison.esgComparison.map(e => `<td>${e.greenLoan ? '✓' : '✗'}</td>`).join('')}
-            </tr>
-            <tr>
-              <td>Margin Ratchet</td>
-              ${comparison.esgComparison.map(e => `<td>${e.marginRatchet ? '✓' : '✗'}</td>`).join('')}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <h3>ESG</h3>
+    <table>
+      <tr><th>Feature</th>${headers}</tr>
+      <tr><td>ESG Provisions</td>${comparison.esgComparison.map(e => `<td>${e.hasESGProvisions ? '✓' : '✗'}</td>`).join('')}</tr>
+      <tr><td>Sustainability-Linked</td>${comparison.esgComparison.map(e => `<td>${e.sustainabilityLinked ? '✓' : '✗'}</td>`).join('')}</tr>
+    </table>
   `;
   
-  container.innerHTML = html;
+  compareResults.innerHTML = html;
 }
 
 // Export
-function exportAnalysis() {
+function exportJSON() {
   if (!currentAnalysis) return;
   
   const data = JSON.stringify(currentAnalysis, null, 2);
@@ -503,13 +300,29 @@ function exportAnalysis() {
   
   const a = document.createElement('a');
   a.href = url;
-  a.download = `loanlens-analysis-${currentAnalysis.id}.json`;
+  a.download = `loanlens-${currentAnalysis.id}.json`;
   a.click();
   
   URL.revokeObjectURL(url);
+  showToast('Exported successfully');
 }
 
-// Utility
+// UI Helpers
+function showLoading() {
+  loading.classList.remove('hidden');
+}
+
+function hideLoading() {
+  loading.classList.add('hidden');
+}
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
 function escapeHtml(text) {
   if (!text) return '';
   const div = document.createElement('div');
@@ -517,5 +330,5 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Make exportAnalysis available globally
-window.exportAnalysis = exportAnalysis;
+// Make exportJSON available globally
+window.exportJSON = exportJSON;
