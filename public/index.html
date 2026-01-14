@@ -3,113 +3,494 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LoanLens - Loan Document Intelligence</title>
+  <title>LoanLens - Enterprise Loan Intelligence Platform</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-  <nav class="nav">
-    <div class="nav-brand">LoanLens</div>
-    <div class="nav-tabs">
-      <button class="tab active" data-view="analyze">Analyze</button>
-      <button class="tab" data-view="compare">Compare</button>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <i class="fas fa-chart-line"></i>
+        <span>LoanLens</span>
+        <span class="badge-pro">ENTERPRISE</span>
+      </div>
     </div>
-  </nav>
-
-  <main class="main">
-    <!-- Analyze View -->
-    <section id="analyze-view" class="view active">
-      <div class="upload-zone" id="dropZone">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-        </svg>
-        <h3>Drop PDF or paste text</h3>
-        <input type="file" id="fileInput" accept=".pdf" hidden>
-        <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">Browse Files</button>
+    <div class="header-center">
+      <div class="search-bar">
+        <i class="fas fa-search"></i>
+        <input type="text" placeholder="Search documents, borrowers, or terms..." id="globalSearch">
       </div>
-
-      <div class="divider">OR</div>
-
-      <div class="text-input">
-        <textarea id="textInput" placeholder="Paste loan document text here..."></textarea>
-        <button id="analyzeBtn" class="btn-primary">Analyze Document</button>
+    </div>
+    <div class="header-right">
+      <button class="icon-btn" title="Notifications">
+        <i class="fas fa-bell"></i>
+        <span class="notification-badge">3</span>
+      </button>
+      <button class="icon-btn" title="Settings">
+        <i class="fas fa-cog"></i>
+      </button>
+      <div class="user-menu">
+        <img src="https://ui-avatars.com/api/?name=John+Doe&background=2563eb&color=fff" alt="User">
+        <span>John Doe</span>
+        <i class="fas fa-chevron-down"></i>
       </div>
+    </div>
+  </header>
 
-      <div id="results" class="results hidden">
-        <div class="results-header">
-          <h2 id="docTitle">Analysis Results</h2>
-          <button class="btn-icon" onclick="exportJSON()" title="Export JSON">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-            </svg>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-view="dashboard">
+        <i class="fas fa-th-large"></i>
+        <span>Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-view="analyze">
+        <i class="fas fa-file-upload"></i>
+        <span>New Analysis</span>
+      </a>
+      <a href="#" class="nav-item" data-view="documents">
+        <i class="fas fa-folder-open"></i>
+        <span>Documents</span>
+        <span class="count">24</span>
+      </a>
+      <a href="#" class="nav-item" data-view="compare">
+        <i class="fas fa-columns"></i>
+        <span>Compare</span>
+      </a>
+      <a href="#" class="nav-item" data-view="alerts">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>Alerts</span>
+        <span class="count alert">5</span>
+      </a>
+      <a href="#" class="nav-item" data-view="reports">
+        <i class="fas fa-chart-bar"></i>
+        <span>Reports</span>
+      </a>
+    </nav>
+    
+    <div class="sidebar-section">
+      <div class="section-header">
+        <span>Recent Documents</span>
+        <i class="fas fa-chevron-down"></i>
+      </div>
+      <div class="recent-list" id="recentDocs">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="storage-info">
+        <div class="storage-bar">
+          <div class="storage-used" style="width: 65%"></div>
+        </div>
+        <span class="storage-text">65% of 100GB used</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Dashboard View -->
+    <section id="dashboard-view" class="view active">
+      <div class="view-header">
+        <h1>Portfolio Overview</h1>
+        <div class="view-actions">
+          <button class="btn-secondary">
+            <i class="fas fa-download"></i> Export Report
+          </button>
+          <button class="btn-primary" onclick="switchView('analyze')">
+            <i class="fas fa-plus"></i> New Analysis
           </button>
         </div>
+      </div>
 
-        <div class="metrics">
-          <div class="metric">
-            <span class="metric-label">Amount</span>
-            <span class="metric-value" id="metricAmount">-</span>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue">
+            <i class="fas fa-file-contract"></i>
           </div>
-          <div class="metric">
-            <span class="metric-label">Rate</span>
-            <span class="metric-value" id="metricRate">-</span>
+          <div class="stat-content">
+            <span class="stat-label">Total Documents</span>
+            <span class="stat-value" id="statDocs">24</span>
+            <span class="stat-change positive">+3 this month</span>
           </div>
-          <div class="metric">
-            <span class="metric-label">Covenants</span>
-            <span class="metric-value" id="metricCovenants">-</span>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">
+            <i class="fas fa-dollar-sign"></i>
           </div>
-          <div class="metric">
-            <span class="metric-label">Risks</span>
-            <span class="metric-value" id="metricRisks">-</span>
+          <div class="stat-content">
+            <span class="stat-label">Total Exposure</span>
+            <span class="stat-value" id="statExposure">$2.4B</span>
+            <span class="stat-change positive">+12% YoY</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon orange">
+            <i class="fas fa-exclamation-circle"></i>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">Covenant Alerts</span>
+            <span class="stat-value" id="statAlerts">5</span>
+            <span class="stat-change negative">2 critical</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">
+            <i class="fas fa-leaf"></i>
+          </div>
+          <div class="stat-content">
+            <span class="stat-label">ESG Loans</span>
+            <span class="stat-value" id="statESG">12</span>
+            <span class="stat-change">50% of portfolio</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="card chart-card">
+          <div class="card-header">
+            <h3>Covenant Compliance Trend</h3>
+            <div class="card-actions">
+              <button class="icon-btn-sm"><i class="fas fa-ellipsis-v"></i></button>
+            </div>
+          </div>
+          <div class="card-body">
+            <canvas id="complianceChart"></canvas>
           </div>
         </div>
 
-        <div class="sections">
-          <details class="section" open>
-            <summary>Financial Terms</summary>
-            <div id="financialTerms" class="section-content"></div>
-          </details>
-
-          <details class="section">
-            <summary>Parties</summary>
-            <div id="parties" class="section-content"></div>
-          </details>
-
-          <details class="section">
-            <summary>Covenants</summary>
-            <div id="covenants" class="section-content"></div>
-          </details>
-
-          <details class="section">
-            <summary>Risk Flags</summary>
-            <div id="risks" class="section-content"></div>
-          </details>
-
-          <details class="section">
-            <summary>ESG & Sustainability</summary>
-            <div id="esg" class="section-content"></div>
-          </details>
+        <div class="card">
+          <div class="card-header">
+            <h3>Recent Activity</h3>
+          </div>
+          <div class="card-body">
+            <div class="activity-list" id="activityList">
+              <!-- Populated by JS -->
+            </div>
+          </div>
         </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Upcoming Obligations</h3>
+          </div>
+          <div class="card-body">
+            <div class="obligations-list" id="obligationsList">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Risk Distribution</h3>
+          </div>
+          <div class="card-body">
+            <canvas id="riskChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analyze View -->
+    <section id="analyze-view" class="view">
+      <div class="view-header">
+        <h1>Document Analysis</h1>
+        <div class="view-actions">
+          <button class="btn-secondary">
+            <i class="fas fa-history"></i> View History
+          </button>
+        </div>
+      </div>
+
+      <div class="upload-container">
+        <div class="upload-methods">
+          <div class="upload-method active" data-method="file">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Upload File</span>
+          </div>
+          <div class="upload-method" data-method="text">
+            <i class="fas fa-keyboard"></i>
+            <span>Paste Text</span>
+          </div>
+          <div class="upload-method" data-method="url">
+            <i class="fas fa-link"></i>
+            <span>From URL</span>
+          </div>
+          <div class="upload-method" data-method="batch">
+            <i class="fas fa-layer-group"></i>
+            <span>Batch Upload</span>
+          </div>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-content" id="fileUpload">
+            <div class="upload-icon">
+              <i class="fas fa-file-pdf"></i>
+            </div>
+            <h3>Drop your loan document here</h3>
+            <p>or click to browse • PDF, DOCX, TXT • Max 50MB</p>
+            <input type="file" id="fileInput" accept=".pdf,.docx,.txt" hidden>
+            <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+              <i class="fas fa-folder-open"></i> Browse Files
+            </button>
+          </div>
+
+          <div class="upload-content hidden" id="textUpload">
+            <textarea id="textInput" placeholder="Paste your loan document text here..."></textarea>
+            <button class="btn-primary" id="analyzeTextBtn">
+              <i class="fas fa-magic"></i> Analyze Text
+            </button>
+          </div>
+
+          <div class="upload-content hidden" id="urlUpload">
+            <input type="url" id="urlInput" placeholder="https://example.com/document.pdf">
+            <button class="btn-primary" id="analyzeUrlBtn">
+              <i class="fas fa-download"></i> Fetch & Analyze
+            </button>
+          </div>
+
+          <div class="upload-content hidden" id="batchUpload">
+            <div class="batch-dropzone">
+              <i class="fas fa-layer-group"></i>
+              <p>Drop multiple files here or click to browse</p>
+              <input type="file" id="batchInput" accept=".pdf" multiple hidden>
+              <button class="btn-primary" onclick="document.getElementById('batchInput').click()">
+                <i class="fas fa-folder-open"></i> Select Multiple Files
+              </button>
+            </div>
+            <div class="batch-list" id="batchList"></div>
+          </div>
+        </div>
+
+        <div class="analysis-options">
+          <h4>Analysis Options</h4>
+          <div class="options-grid">
+            <label class="checkbox-label">
+              <input type="checkbox" checked>
+              <span>Extract Financial Terms</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" checked>
+              <span>Identify Covenants</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" checked>
+              <span>Detect Risk Flags</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" checked>
+              <span>ESG Analysis</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="aiEnhance">
+              <span>AI Enhancement (GPT-4)</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox">
+              <span>Generate Summary Report</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="analysisResults" class="analysis-results hidden">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Documents View -->
+    <section id="documents-view" class="view">
+      <div class="view-header">
+        <h1>Document Library</h1>
+        <div class="view-actions">
+          <div class="filter-group">
+            <select class="filter-select">
+              <option>All Documents</option>
+              <option>This Month</option>
+              <option>Last 3 Months</option>
+              <option>This Year</option>
+            </select>
+            <select class="filter-select">
+              <option>All Types</option>
+              <option>Revolving</option>
+              <option>Term Loan</option>
+              <option>Bridge</option>
+            </select>
+          </div>
+          <button class="btn-primary" onclick="switchView('analyze')">
+            <i class="fas fa-plus"></i> New Document
+          </button>
+        </div>
+      </div>
+
+      <div class="documents-table">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox"></th>
+              <th>Document Name</th>
+              <th>Borrower</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Analyzed</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="documentsTableBody">
+            <!-- Populated by JS -->
+          </tbody>
+        </table>
       </div>
     </section>
 
     <!-- Compare View -->
     <section id="compare-view" class="view">
-      <div class="compare-header">
-        <h2>Compare Loans</h2>
-        <p>Select documents to compare</p>
+      <div class="view-header">
+        <h1>Compare Documents</h1>
+        <div class="view-actions">
+          <button class="btn-secondary">
+            <i class="fas fa-download"></i> Export Comparison
+          </button>
+        </div>
       </div>
-      <div id="compareList" class="compare-list"></div>
-      <div id="compareResults" class="compare-results hidden"></div>
+
+      <div class="compare-selector">
+        <div class="selector-panel">
+          <h3>Select Documents to Compare</h3>
+          <div id="compareDocList" class="compare-doc-list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+        <div class="compare-preview" id="comparePreview">
+          <p class="empty-state">Select 2 or more documents to compare</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Alerts View -->
+    <section id="alerts-view" class="view">
+      <div class="view-header">
+        <h1>Covenant Alerts & Monitoring</h1>
+        <div class="view-actions">
+          <button class="btn-secondary">
+            <i class="fas fa-cog"></i> Configure Alerts
+          </button>
+        </div>
+      </div>
+
+      <div class="alerts-grid">
+        <div class="alert-card critical">
+          <div class="alert-header">
+            <i class="fas fa-exclamation-circle"></i>
+            <span class="alert-badge">CRITICAL</span>
+          </div>
+          <h3>Leverage Ratio Breach</h3>
+          <p>Acme Corp - Facility Agreement</p>
+          <div class="alert-details">
+            <span>Current: 4.2:1</span>
+            <span>Threshold: 3.5:1</span>
+          </div>
+          <div class="alert-actions">
+            <button class="btn-sm">View Details</button>
+            <button class="btn-sm-secondary">Acknowledge</button>
+          </div>
+        </div>
+
+        <div class="alert-card warning">
+          <div class="alert-header">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span class="alert-badge">WARNING</span>
+          </div>
+          <h3>Approaching Covenant Limit</h3>
+          <p>Global Industries - Credit Facility</p>
+          <div class="alert-details">
+            <span>Current: 3.3:1</span>
+            <span>Threshold: 3.5:1</span>
+          </div>
+          <div class="alert-actions">
+            <button class="btn-sm">View Details</button>
+            <button class="btn-sm-secondary">Acknowledge</button>
+          </div>
+        </div>
+
+        <div class="alert-card info">
+          <div class="alert-header">
+            <i class="fas fa-info-circle"></i>
+            <span class="alert-badge">INFO</span>
+          </div>
+          <h3>Reporting Due Soon</h3>
+          <p>Tech Solutions - Term Loan</p>
+          <div class="alert-details">
+            <span>Due in 5 days</span>
+          </div>
+          <div class="alert-actions">
+            <button class="btn-sm">View Details</button>
+            <button class="btn-sm-secondary">Acknowledge</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reports View -->
+    <section id="reports-view" class="view">
+      <div class="view-header">
+        <h1>Reports & Analytics</h1>
+        <div class="view-actions">
+          <button class="btn-primary">
+            <i class="fas fa-plus"></i> Generate Report
+          </button>
+        </div>
+      </div>
+
+      <div class="reports-grid">
+        <div class="report-card">
+          <i class="fas fa-file-pdf"></i>
+          <h3>Portfolio Summary</h3>
+          <p>Comprehensive overview of all loan documents</p>
+          <button class="btn-secondary">Generate</button>
+        </div>
+        <div class="report-card">
+          <i class="fas fa-chart-line"></i>
+          <h3>Covenant Compliance</h3>
+          <p>Detailed covenant tracking and trends</p>
+          <button class="btn-secondary">Generate</button>
+        </div>
+        <div class="report-card">
+          <i class="fas fa-leaf"></i>
+          <h3>ESG Report</h3>
+          <p>Sustainability metrics and KPI tracking</p>
+          <button class="btn-secondary">Generate</button>
+        </div>
+        <div class="report-card">
+          <i class="fas fa-shield-alt"></i>
+          <h3>Risk Assessment</h3>
+          <p>Portfolio risk analysis and recommendations</p>
+          <button class="btn-secondary">Generate</button>
+        </div>
+      </div>
     </section>
   </main>
 
-  <div id="loading" class="loading hidden">
-    <div class="spinner"></div>
-    <p>Analyzing document...</p>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="loading-content">
+      <div class="spinner-large"></div>
+      <h3>Analyzing Document...</h3>
+      <p id="loadingStatus">Extracting text from PDF...</p>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
   </div>
 
-  <div id="toast" class="toast hidden"></div>
+  <!-- Toast Notifications -->
+  <div id="toastContainer" class="toast-container"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
